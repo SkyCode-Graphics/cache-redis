@@ -1,0 +1,9 @@
+{
+  "$schema": "./node_modules/@SkyCode-Graphics/sky-scripts/config.schema.json",
+  "outDir": "./dist",
+  "exportFiles": {
+  },
+  "tsconfig": {
+    "default": "./tsconfig.build.json"
+  }
+}
