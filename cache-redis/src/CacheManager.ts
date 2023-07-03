@@ -1,5 +1,18 @@
 import { Redis, RedisOptions } from "ioredis";
-import type { PrismaClient } from "@prisma/client";
+import type { MockPrismaClient } from "@mock/prisma";
+import { Prisma } from "@prisma/client";
+import { CachePaginator } from "./CachePaginator";
+
+interface RedisError {
+  code: string;
+  message: string;
+  name: string;
+  stack: string;
+  syscall: string;
+  address: string;
+  port: number;
+  errno: number;
+}
 
 export interface CacheModelOption {
   /**
@@ -30,16 +43,39 @@ export interface CacheModelOption {
   ttl: number;
 }
 
-export class CacheManager {
-  redis: Redis;
-  prisma: PrismaClient;
+export class CacheManager<P extends any> {
+  readonly redis: Redis;
 
-  modelOptions: Map<string, CacheModelOption> = new Map();
+  readonly modelOptions: Map<string, CacheModelOption> = new Map();
   ttl: number = 0;
 
-  constructor(prisma: PrismaClient, options: RedisOptions) {
-    this.redis = new Redis(options);
-    this.prisma = prisma;
+  constructor(readonly prisma: P, options: RedisOptions) {
+    this.redis = new Redis({ lazyConnect: true, ...options });
+
+    this.redis.on("connecting", this._redis_connecting.bind(this));
+    this.redis.on("connected", this._redis_connected.bind(this));
+    this.redis.on("error", this._redis_error.bind(this));
+  }
+
+  private _redis_connecting() {
+    console.log("Connecting to Redis...");
+  }
+
+  private _redis_connected() {
+    console.log("Connected to Redis");
+  }
+
+  private _redis_error(e: RedisError) {
+    const err = new Error();
+    err.name = "IOredisError";
+    if (e.code == "ECONNREFUSED") {
+      err.message =
+        `Cannot ${e.syscall} to ${e.address}:${e.port}. Make sure it is running or params are correct.`;
+    } else {
+      err.message = e.message;
+    }
+
+    throw err;
   }
 
   setTTL(ttl: number) {
@@ -48,6 +84,14 @@ export class CacheManager {
 
   connect(): Promise<void> {
     return this.redis.connect();
+  }
+
+  disconnect(): Promise<"OK"> {
+    return this.redis.quit();
+  }
+
+  private get _prisma(): MockPrismaClient {
+    return this.prisma as MockPrismaClient;
   }
 
   /*******************\
@@ -98,10 +142,15 @@ export class CacheManager {
     }
   }
 
-  forceCache(modelName: string, options?: Partial<CacheModelOption>): unknown {
+  async forceCache(
+    modelName: string,
+    options?: Partial<CacheModelOption>,
+  ): Promise<unknown> {
     const opt = this.getOptions(modelName, options);
 
-    const data = this.prisma[modelName].findMany(opt.findMany) as unknown[];
+    const data = await this._prisma[modelName as "model"].findMany(
+      opt.findMany as {},
+    );
 
     if (!data) return null;
 
@@ -118,5 +167,9 @@ export class CacheManager {
     this.set(opt.key, redisData, opt.ttl);
 
     return data;
+  }
+
+  paginator<K extends Prisma.ModelName>(key: Lowercase<K>): CachePaginator<K, P> {
+    return new CachePaginator(key, this);
   }
 }

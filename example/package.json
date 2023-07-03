@@ -3,12 +3,21 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push"
   },
   "keywords": [],
   "author": "ApikaLuca",
   "license": "ISC",
   "dependencies": {
-    "cache-redis": "workspace:^"
+    "@prisma/client": "^4.15.0",
+    "cache-redis": "workspace:^",
+    "tslib": "^2.5.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.3.1",
+    "prisma": "^4.16.0",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.3"
   }
 }
